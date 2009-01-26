@@ -102,7 +102,7 @@ class AuthHMAC
       end
       
       def content_md5(headers)
-        find_header(%w(CONTENT-MD5 CONTENT_MD5), headers)
+        find_header(%w(CONTENT-MD5 CONTENT_MD5 HTTP_CONTENT_MD5), headers)
       end
       
       def request_path(request)
@@ -143,7 +143,6 @@ class AuthHMAC
     # Defaults
     @service_id = self.class.name
     @signature_class = @@default_signature_class
-    #@signature_method = @@default_signature_method
 
     unless options.nil?
       @service_id = options[:service_id] if options.key?(:service_id)
