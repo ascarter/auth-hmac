@@ -117,7 +117,6 @@ class AuthHMAC
       end
   end
    
-#  @@default_signature_method = lambda { |r| CanonicalString.new(r) }
   @@default_signature_class = CanonicalString
 
   # Create an AuthHMAC instance using the given credential store
