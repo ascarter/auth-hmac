@@ -291,10 +291,14 @@ describe AuthHMAC do
   end
   
   describe AuthHMAC::Rails::ControllerFilter do
+    before(:each) do
+      @logger = mock('Logger', :error => true, :info => true, :warn => true, :debug => true).as_null_object
+    end
+
     class TestController < ActionController::Base
       with_auth_hmac YAML.load(File.read(File.join(File.dirname(__FILE__), 'fixtures', 'credentials.yml'))),
         :only => [:index]
-      
+     
       def index
         render :nothing => true, :status => :ok
       end
@@ -359,109 +363,129 @@ describe AuthHMAC do
     end
     
     describe NilCredentialsController do
+      before(:each) do
+        @nil_controller = NilCredentialsController.new
+        @nil_controller.stub!(:logger).and_return(@logger)
+      end
+
       it "should not raise an error when credentials are nil" do
         request = ActionController::TestRequest.new
         request.action = 'index'
         request.path = "/index"
         lambda do
-          NilCredentialsController.new.process(request, ActionController::TestResponse.new).code.should == "200"
+          @nil_controller.process(request, ActionController::TestResponse.new).code.should == "200"
         end.should_not raise_error
       end
     end
    
     describe TestController do
+      before(:each) do
+        @test_controller = TestController.new
+        @test_controller.stub!(:logger).and_return(@logger)
+      end
+
       it "should allow a request with the proper hmac" do
         request = ActionController::TestRequest.new
         request.env['Authorization'] = "AuthHMAC access key 1:6BVEVfAyIDoI3K+WallRMnDxROQ="
         request.env['DATE'] = "Thu, 10 Jul 2008 03:29:56 GMT"
         request.action = 'index'
         request.path = "/index"
-        TestController.new.process(request, ActionController::TestResponse.new).code.should == "200"
+        @test_controller.process(request, ActionController::TestResponse.new).code.should == "200"
       end
 
       it "should reject a request with no hmac" do
         request = ActionController::TestRequest.new
         request.action = 'index'
-        TestController.new.process(request, ActionController::TestResponse.new).code.should == "401"
+        @test_controller.process(request, ActionController::TestResponse.new).code.should == "401"
       end
 
       it "should reject a request with the wrong hmac" do
         request = ActionController::TestRequest.new
         request.action = 'index'
         request.env['Authorization'] = "AuthHMAC bogus:bogus"
-        TestController.new.process(request, ActionController::TestResponse.new).code.should == "401"
+        @test_controller.process(request, ActionController::TestResponse.new).code.should == "401"
       end
 
       it "should include a WWW-Authenticate header with the schema AuthHMAC" do
         request = ActionController::TestRequest.new
         request.action = 'index'
         request.env['Authorization'] = "AuthHMAC bogus:bogus"
-        TestController.new.process(request, ActionController::TestResponse.new).headers['WWW-Authenticate'].should == "AuthHMAC"
+        @test_controller.process(request, ActionController::TestResponse.new).headers['WWW-Authenticate'].should == "AuthHMAC"
       end
 
       it "should include a default error message" do
         request = ActionController::TestRequest.new
         request.action = 'index'
         request.env['Authorization'] = "AuthHMAC bogus:bogus"
-        TestController.new.process(request, ActionController::TestResponse.new).body.should == "HMAC Authentication failed"
+        @test_controller.process(request, ActionController::TestResponse.new).body.should == "HMAC Authentication failed"
       end
 
       it "should allow anything to access the public action (using only)" do
         request = ActionController::TestRequest.new
         request.action = 'public'
-        TestController.new.process(request, ActionController::TestResponse.new).code.should == "200"
+        @test_controller.process(request, ActionController::TestResponse.new).code.should == "200"
       end
     end
 
     describe MessageTestController do
+      before(:each) do
+        @message_test_controller = MessageTestController.new
+        @message_test_controller.stub!(:logger).and_return(@logger)
+      end
+
       it "should reject a request with a given message" do
         request = ActionController::TestRequest.new
         request.action = 'index'
         request.env['Authorization'] = "AuthHMAC bogus:bogus"
-        MessageTestController.new.process(request, ActionController::TestResponse.new).body.should == "Stay away!"
+        @message_test_controller.process(request, ActionController::TestResponse.new).body.should == "Stay away!"
       end
 
       it "should allow anything to access the public action (using except)" do
         request = ActionController::TestRequest.new
         request.action = 'public'
-        MessageTestController.new.process(request, ActionController::TestResponse.new).code.should == "200"
+        @message_test_controller.process(request, ActionController::TestResponse.new).code.should == "200"
       end
     end
 
     describe CustomTestController do
+      before(:each) do
+        @custom_test_controller = CustomTestController.new
+        @custom_test_controller.stub!(:logger).and_return(@logger)
+      end
+
       it "should allow a request with the proper hmac" do
         request = ActionController::TestRequest.new
         request.env['Authorization'] = "MyService access key 1:J2W4dOrv/sGsL0C5adnZYiQ3d70="
         request.env['DATE'] = "Thu, 10 Jul 2008 03:29:56 GMT"
         request.action = 'index'
         request.path = "/index"
-       CustomTestController.new.process(request, ActionController::TestResponse.new).code.should == "200"
+        @custom_test_controller.process(request, ActionController::TestResponse.new).code.should == "200"
       end
 
       it "should reject a request with no hmac" do
         request = ActionController::TestRequest.new
         request.action = 'index'
-        CustomTestController.new.process(request, ActionController::TestResponse.new).code.should == "401"
+        @custom_test_controller.process(request, ActionController::TestResponse.new).code.should == "401"
       end
 
       it "should reject a request with the wrong hmac" do
         request = ActionController::TestRequest.new
         request.action = 'index'
         request.env['Authorization'] = "AuthHMAC bogus:bogus"
-        CustomTestController.new.process(request, ActionController::TestResponse.new).code.should == "401"
+        @custom_test_controller.process(request, ActionController::TestResponse.new).code.should == "401"
       end
 
       it "should reject a request with a given message" do
         request = ActionController::TestRequest.new
         request.action = 'index'
         request.env['Authorization'] = "AuthHMAC bogus:bogus"
-        CustomTestController.new.process(request, ActionController::TestResponse.new).body.should == "Stay away!"
+        @custom_test_controller.process(request, ActionController::TestResponse.new).body.should == "Stay away!"
       end
 
       it "should allow anything to access the public action (using except)" do
         request = ActionController::TestRequest.new
         request.action = 'public'
-        CustomTestController.new.process(request, ActionController::TestResponse.new).code.should == "200"
+        @custom_test_controller.process(request, ActionController::TestResponse.new).code.should == "200"
       end
     end
   end

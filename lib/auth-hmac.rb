@@ -66,13 +66,21 @@ class AuthHMAC
   #
   class CanonicalString < String # :nodoc:
     include Headers
-    
+
+    HEADER_CONTENT_TYPE = %w(CONTENT-TYPE CONTENT_TYPE HTTP_CONTENT_TYPE)
+    HEADER_CONTENT_MD5  = %w(CONTENT-MD5 CONTENT_MD5 HTTP_CONTENT_MD5)
+    HEADER_DATE         = %w(DATE HTTP_DATE)
+
     def initialize(request)
       self << request_method(request) + "\n"
       self << header_values(headers(request)) + "\n"
       self << request_path(request)
     end
-    
+
+    def CanonicalString.hmac_headers(request)
+      request.reject { |k,v| !(HEADER_CONTENT_TYPE + HEADER_CONTENT_MD5 + HEADER_DATE).include?(k) }
+    end
+
     private
       def request_method(request)
         if request.respond_to?(:request_method) && request.request_method.is_a?(String)
@@ -94,17 +102,18 @@ class AuthHMAC
       end
      
       def content_type(headers)
-        find_header(%w(CONTENT-TYPE CONTENT_TYPE HTTP_CONTENT_TYPE), headers)
-      end
-      
-      def date(headers)
-        find_header(%w(DATE HTTP_DATE), headers)
+        find_header(HEADER_CONTENT_TYPE, headers)
       end
       
       def content_md5(headers)
-        find_header(%w(CONTENT-MD5 CONTENT_MD5 HTTP_CONTENT_MD5), headers)
+        find_header(HEADER_CONTENT_MD5, headers)
+      end
+
+      def date(headers)
+        find_header(HEADER_DATE, headers)
       end
       
+     
       def request_path(request)
         # Try unparsed_uri in case it is a Webrick request
         path = if request.respond_to?(:unparsed_uri)
@@ -188,7 +197,17 @@ class AuthHMAC
     credentials = { access_key_id => secret }
     self.new(credentials, options).authenticated?(request)
   end
-  
+
+  # Returns authorization header from request as detected by AuthHMAC
+  def AuthHMAC.authorization_header(request, options = nil)
+    self.new(nil, options).authorization_header(request)
+  end
+
+  # Returns the headers used by AuthHMAC signature string class
+  def AuthHMAC.hmac_headers(request, options = nil)
+    self.new(nil, options).hmac_headers(request)
+  end
+
   # Signs a request using the access_key_id and the secret associated with that id
   # in the credential store.
   #
@@ -230,7 +249,15 @@ class AuthHMAC
   def canonical_string(request)
     @signature_method.call(request)
   end
-  
+ 
+  def hmac_headers(request)
+    if @signature_class.respond_to?(:hmac_headers)
+      @signature_class.hmac_headers(headers(request))
+    else
+      headers(request)
+    end
+  end
+
   def authorization_header(request)
     find_header(%w(Authorization HTTP_AUTHORIZATION), headers(request))
   end
@@ -260,7 +287,7 @@ class AuthHMAC
             self.authhmac = AuthHMAC.new(self.credentials, options.delete(:hmac))
             before_filter(:hmac_login_required, options)
           else
-            $stderr.puts("with_auth_hmac called with nil credentials - authentication will be skipped")
+            $stderr.puts("[AuthHMAC] with_auth_hmac called with nil credentials - authentication will be skipped")
           end
         end
       end
@@ -268,13 +295,19 @@ class AuthHMAC
       module InstanceMethods # :nodoc:
         def hmac_login_required
           unless hmac_authenticated?
+            logger.error("AuthHMAC authentication failed: #{self.class.authhmac.hmac_headers(request).inspect}")
             response.headers['WWW-Authenticate'] = 'AuthHMAC'
             render :text => self.class.authhmac_failure_message, :status => :unauthorized
           end
         end
         
         def hmac_authenticated?
-          self.class.authhmac.nil? ? true : self.class.authhmac.authenticated?(request)
+          if self.class.authhmac.nil?
+            true
+          else
+            logger.info("  Authorization: #{self.class.authhmac.authorization_header(request)}")
+            self.class.authhmac.authenticated?(request)
+          end
         end
       end
       
